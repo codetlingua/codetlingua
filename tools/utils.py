@@ -28,7 +28,7 @@ _UNKNOWN = 5
 _mapping = {_SUCCESS: SUCCESS, _RUNTIME_FAILED: RUNTIME_FAILED, _COMPILE_FAILED: COMPILE_FAILED, _INFINTIE_LOOP: INFINTIE_LOOP, _TEST_FAILED: TEST_FAILED, _UNKNOWN: None}
 
 
-def write_directory(directory: PathLike, data: Iterable[Dict]):
+def write_directory(directory: PathLike, data: Iterable[Dict], ext: str):
     os.makedirs(directory, exist_ok=True)
     counters = {}
     for sample in data:
@@ -39,7 +39,7 @@ def write_directory(directory: PathLike, data: Iterable[Dict]):
         if task_id not in counters:
             counters[task_id] = 0
         sample_id = counters[task_id]
-        with open(os.path.join(task_dir, f"{sample_id}.py"), "w") as f:
+        with open(os.path.join(task_dir, f"{sample_id}{ext}"), "w") as f:
             f.write(sample["solution"])
         counters[task_id] += 1
 

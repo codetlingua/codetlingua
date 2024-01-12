@@ -40,7 +40,7 @@ def translate(args, workdir: PathLike, model: DecoderBase):
 
             p_name = item['id']
             os.makedirs(os.path.join(workdir, p_name), exist_ok=True)
-            log = f"Translate: {p_name} from {args.source_lang} to {args.target_lang} using {args.model}"
+            log = f"Translate: {p_name} from {args.source_lang}-{args.dataset} to {args.target_lang} using {args.model}"
             n_existing = 0
             if args.resume:
                 # count existing translated files

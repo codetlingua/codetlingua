@@ -37,5 +37,5 @@ python3 tools/sanitize.py   --samples=translations/$DATASET/$MODEL/$SRC_LANG/$TR
                             --source_lang=$SRC_LANG \
                             --target_lang=$TRG_LANG \
                             --$REMOVE_PROMPT \
-                            --eofs "# <END-OF-CODE>" "<END-OF-CODE>" "END-OF-CODE" "Python:" "Java:" "# Answer:" \
+                            --eofs "# <END-OF-CODE>" "<END-OF-CODE>" "END-OF-CODE" "Python:" "Java:" "C:" "# Answer:" \
                             --rm-prefix-lines "Translate the above" '"""'

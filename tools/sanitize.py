@@ -21,6 +21,8 @@ if __name__ == "__main__":
     parser.add_argument("--rm-prefix-lines", nargs="+", type=str, help="Remove lines starting with these string.", default=[])
     args = parser.parse_args()
 
+    EXTENSIONS = { "C": ".c", "C++": ".cpp", "Java": ".java", "Python": ".py", "Go": ".go" }
+
     # make a new folder with "-sanitized" suffix
     is_folder = os.path.isdir(args.samples)
     target_path = pathlib.Path(args.samples)
@@ -76,4 +78,4 @@ if __name__ == "__main__":
         )
 
     if is_folder:
-        write_directory(target_path, new_solutions)
+        write_directory(target_path, new_solutions, ext=EXTENSIONS[args.target_lang])
