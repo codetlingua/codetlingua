@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import List
 from warnings import warn
 
+
 os.environ["TRANSFORMERS_CACHE"] = os.getcwd() + "/huggingface"
 
 import openai
@@ -66,7 +67,8 @@ class DecoderBase(ABC):
         name: str,
         batch_size: int = 1,
         temperature: float = 0.8,
-        conversational: bool = False
+        conversational: bool = False,
+        tensor_parallel_size: int = 1        
     ) -> None:
         print("Initializing a decoder model: {} ...".format(name))
         self.name = name
@@ -75,10 +77,11 @@ class DecoderBase(ABC):
         self.eos = EOS
         self.skip_special_tokens = False
         self.conversational = conversational
+        self.tensor_parallel_size = tensor_parallel_size
 
     @abstractmethod
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         pass
 
@@ -93,7 +96,7 @@ class VLlmDecoder(DecoderBase):
     def __init__(self, name: str, **kwargs) -> None:
         super().__init__(name, **kwargs)
 
-        kwargs = {"tensor_parallel_size": int(os.getenv("VLLM_N_GPUS", "1"))}
+        kwargs = {"tensor_parallel_size": self.tensor_parallel_size}
         if "CodeLlama" in name:
             kwargs["dtype"] = "bfloat16"
         elif "CodeBooga" in name:
@@ -112,10 +115,26 @@ class VLlmDecoder(DecoderBase):
             kwargs["dtype"] = "float16"
             kwargs["trust_remote_code"] = True
 
-        self.llm = LLM(model=name, **kwargs)
+       
+        self.path = name
+   
+        self.llm = LLM(model=self.path, **kwargs)
+
+        self.context_window_length = self.llm.get_tokenizer().model_max_length
+        if self.context_window_length > 1000000 and name in model_paths:
+            with open(f'{self.path}/config.json') as fin:
+                config_data = json.load(fin)
+
+            if 'n_positions' in config_data:
+                self.context_window_length = config_data['n_positions']
+            elif 'max_position_embeddings' in config_data:
+                self.context_window_length = config_data['max_position_embeddings']
+            else:
+                print('Model has unclear context_window_length, setting to 1024')
+                self.context_window_length = 1024
 
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if do_sample:
             assert self.temperature > 0, "Temperature must be greater than 0!"
@@ -125,7 +144,7 @@ class VLlmDecoder(DecoderBase):
             [prompt] * batch_size,
             SamplingParams(
                 temperature=self.temperature,
-                max_tokens=self.max_new_tokens,
+                max_tokens=min(max_length, self.context_window_length),
                 top_p=0.95 if do_sample else 1.0,
                 stop=self.eos,
             ),
@@ -144,7 +163,7 @@ class ChatML(VLlmDecoder):
         self.eos += ["\n```"]
 
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 512 + 256
     ) -> List[str]:
         if do_sample:
             assert self.temperature > 0, "Temperature must be greater than 0!"
@@ -160,7 +179,7 @@ Can you complete the following Python function?
 <|im_start|>assistant
 ```python
 """
-        return VLlmDecoder.codegen(self, input, do_sample, num_samples)
+        return VLlmDecoder.codegen(self, input, do_sample, num_samples, max_length)
 
 
 class Solar(VLlmDecoder):
@@ -169,7 +188,7 @@ class Solar(VLlmDecoder):
         self.eos += ["\n```"]
 
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if do_sample:
             assert self.temperature > 0, "Temperature must be greater than 0!"
@@ -189,7 +208,7 @@ Sure!
 
 class WizardCoderDecoder(VLlmDecoder):
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         prompt = f"""Below is an instruction that describes a task. Write a response that appropriately completes the request.
 
@@ -200,7 +219,7 @@ Create a Python script for this problem:
 
 ### Response:"""
 
-        return VLlmDecoder.codegen(self, prompt, do_sample, num_samples)
+        return VLlmDecoder.codegen(self, prompt, do_sample, num_samples, max_length)
 
 
 class HFTorchDecoder(DecoderBase):
@@ -260,9 +279,20 @@ class HFTorchDecoder(DecoderBase):
             self.skip_special_tokens = True
         self.model = self.model.to(self.device)
 
+
+        self.context_window_length = self.tokenizer.model_max_length
+        if self.context_window_length > 1000000:
+            if hasattr(self.model.config, 'n_positions'):
+                self.context_window_length = self.model.config.n_positions
+            elif hasattr(self.model.config, 'max_position_embeddings'):
+                self.context_window_length = self.model.config.max_position_embeddings
+            else:
+                print('Model has unclear context_window_length, setting to 1024')
+                self.context_window_length = 1024
+
     @torch.inference_mode()
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if self.temperature == 0:
             assert not do_sample
@@ -285,9 +315,11 @@ class HFTorchDecoder(DecoderBase):
             kwargs["top_p"] = 0.95
             kwargs["temperature"] = self.temperature
 
+        
+
         raw_outputs = self.model.generate(
             input_tokens,
-            max_new_tokens=self.tokenizer.model_max_length - len(input_tokens[0]),
+            max_new_tokens=min(max_length, self.context_window_length - len(input_tokens[0])),
             stopping_criteria=scores,
             do_sample=do_sample,
             output_scores=True,
@@ -315,7 +347,7 @@ class HFTorchDecoder(DecoderBase):
 class DeepSeekInstruct(HFTorchDecoder):
     @torch.inference_mode()
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if self.temperature == 0:
             assert not do_sample
@@ -335,9 +367,10 @@ class DeepSeekInstruct(HFTorchDecoder):
             kwargs["top_p"] = 0.95
             kwargs["temperature"] = self.temperature
 
+
         raw_outputs = self.model.generate(
             input_tokens,
-            max_new_tokens=self.tokenizer.model_max_length - len(input_tokens[0]),
+            max_new_tokens=min(max_length, self.context_window_length - len(input_tokens[0])),
             do_sample=do_sample,
             output_scores=True,
             return_dict_in_generate=True,
@@ -360,7 +393,7 @@ class OpenAIChatDecoder(DecoderBase):
         self.client = openai.OpenAI()
 
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if do_sample:
             assert self.temperature > 0, "Temperature must be positive for sampling"
@@ -424,7 +457,7 @@ class IncoderDecoder(HFTorchDecoder):
         self.eos = self.eos + self.extra_eos
 
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         input = prompt + self.infill_ph + self.extra_end
         input_tokens = self.tokenizer.encode(input, return_tensors="pt").to(self.device)
@@ -437,9 +470,11 @@ class IncoderDecoder(HFTorchDecoder):
                 )
             ]
         )
+
+
         raw_outputs = self.model.generate(
             input_tokens,
-            max_new_tokens=self.tokenizer.model_max_length - len(input_tokens[0]),
+            max_new_tokens=min(max_length, self.context_window_length - len(input_tokens[0])),
             stopping_criteria=scores,
             do_sample=do_sample,
             top_p=0.95,
@@ -475,7 +510,7 @@ class Codegen2Decoder(HFTorchDecoder):
 
     @torch.inference_mode()
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if self.temperature == 0:
             assert not do_sample
@@ -492,9 +527,11 @@ class Codegen2Decoder(HFTorchDecoder):
                 )
             ]
         )
+
+
         raw_outputs = self.model.generate(
             input_tokens,
-            max_new_tokens=self.tokenizer.model_max_length - len(input_tokens[0]),
+            max_new_tokens=min(max_length, self.context_window_length - len(input_tokens[0])),
             stopping_criteria=scores,
             do_sample=do_sample,
             top_p=0.95,
@@ -529,7 +566,7 @@ class SantaCoder(HFTorchDecoder):
         self.eos = self.eos + self.extra_eos
 
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if self.temperature == 0:
             assert not do_sample
@@ -547,7 +584,7 @@ class SantaCoder(HFTorchDecoder):
             ]
         )
 
-        if len(input_tokens[0]) >= self.tokenizer.model_max_length:
+        if len(input_tokens[0]) >= self.context_window_length:
             outputs = []
             for _ in range(num_samples):
                 outputs.append('MODEL MAX LENGTH EXCEEDED')
@@ -555,7 +592,7 @@ class SantaCoder(HFTorchDecoder):
 
         raw_outputs = self.model.generate(
             input_tokens,
-            max_new_tokens=int((self.tokenizer.model_max_length - len(input_tokens[0])) * 0.9),
+            max_new_tokens=min(max_length, int((self.context_window_length - len(input_tokens[0])) * 0.9)),
             stopping_criteria=scores,
             do_sample=do_sample,
             top_p=0.95,
@@ -589,7 +626,7 @@ class StarCoderInfill(HFTorchDecoder):
         self.suffix_token = "<fim_suffix><fim_middle>"
 
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if self.temperature == 0:
             assert not do_sample
@@ -611,8 +648,9 @@ class StarCoderInfill(HFTorchDecoder):
         if do_sample:
             kwargs["top_p"] = 0.95
             kwargs["temperature"] = max(self.temperature, 1e-2)
+ 
 
-        if len(input_tokens[0]) >= self.tokenizer.model_max_length:
+        if len(input_tokens[0]) >= self.context_window_length :
             outputs = []
             for _ in range(num_samples):
                 outputs.append('MODEL MAX LENGTH EXCEEDED')
@@ -620,7 +658,7 @@ class StarCoderInfill(HFTorchDecoder):
 
         raw_outputs = self.model.generate(
             input_tokens,
-            max_new_tokens=int((self.tokenizer.model_max_length - len(input_tokens[0])) * 0.9),
+            max_new_tokens=min(max_length, int((self.context_window_length  - len(input_tokens[0])) * 0.9)),
             stopping_criteria=scores,
             do_sample=do_sample,
             num_return_sequences=min(self.batch_size, num_samples),
@@ -667,9 +705,20 @@ class CodeT5P(DecoderBase):
 
         self.skip_special_tokens = True
 
+        self.context_window_length = self.tokenizer.model_max_length
+        if self.context_window_length > 1000000:
+            if hasattr(self.model.config, 'n_positions'):
+                self.context_window_length = self.model.config.n_positions
+            elif hasattr(self.model.config, 'max_position_embeddings'):
+                self.context_window_length = self.model.config.max_position_embeddings
+            else:
+                print('Model has unclear context_window_length, setting to 1024')
+                self.context_window_length = 1024 
+
+
     @torch.inference_mode()
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if self.temperature == 0:
             assert not do_sample
@@ -687,12 +736,15 @@ class CodeT5P(DecoderBase):
             ]
         )
 
+
+        max_new_tokens = min(max_length, self.context_window_length - len(input_tokens[0]))     
+
         while max_new_tokens > 0:
             try:
                 raw_outputs = self.model.generate(
                     **input_tokens,
                     decoder_input_ids=input_tokens["input_ids"],
-                    max_new_tokens=self.tokenizer.model_max_length - len(input_tokens[0]),
+                    max_new_tokens=max_new_tokens,
                     stopping_criteria=scores,
                     do_sample=do_sample,
                     top_p=0.95,
@@ -732,7 +784,7 @@ class CodeT5P(DecoderBase):
         return outputs
 
 
-def make_model(name: str, batch_size: int = 1, temperature: float = 0.8):
+def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: int = 1):
     if name == "codegen-2b":
         return HFTorchDecoder(
             batch_size=batch_size,
@@ -873,6 +925,14 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8):
                 name=f"deepseek-ai/deepseek-coder-{nb}b-base",
                 temperature=temperature,
             )
+    elif name == "wizardcoder-33b":
+        return WizardCoderDecoder(
+            batch_size=batch_size,
+            name="WizardLM/WizardCoder-33B-V1.1",
+            temperature=temperature,
+            conversational=True,
+            tensor_parallel_size=ngpus,
+        )    
     elif name == "wizardcoder-34b":
         return WizardCoderDecoder(
             batch_size=batch_size,
@@ -929,7 +989,8 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8):
             batch_size=batch_size,
             name="cognitivecomputations/dolphin-2.6-mixtral-8x7b",
             temperature=temperature,
-            max_new_tokens=512 + 256,
+            tensor_parallel_size=ngpus,
+            # max_new_tokens=512 + 256,
         )
     elif name == "solar-10.7b-instruct":
         return Solar(
@@ -943,13 +1004,38 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8):
             batch_size=batch_size,
             name="beowolx/MistralHermes-CodePro-7B-v1",
             temperature=temperature,
-            max_new_tokens=512 + 256,
+            # max_new_tokens=512 + 256,
         )
     elif name == "phi-2":
-        return VLlmDecoder(
+        return HFTorchDecoder(    # using HFTorchDecoder instead of  VLlmDecoder until this issue is fixed in vllm main https://github.com/vllm-project/vllm/pull/2428
             batch_size=batch_size,
             name="microsoft/phi-2",
             temperature=temperature,
+        )
+    elif name == "mistral-8x7b-instruct":
+        return VLlmDecoder(
+            batch_size=batch_size,
+            name="mistralai/Mixtral-8x7B-Instruct-v0.1",
+            temperature=temperature,
+            tensor_parallel_size=ngpus,
+        )
+    elif name == "octocoder":
+        return VLlmDecoder(
+            batch_size=batch_size,
+            name="bigcode/octocoder",
+            temperature=temperature,
+        )
+    elif name == "magicoder-s-ds-6.7b":
+        return VLlmDecoder(
+            batch_size=batch_size,
+            name="ise-uiuc/Magicoder-S-DS-6.7B",
+            temperature=temperature,
+        )
+    elif name == "magicoder-s-cl-7b":
+        return VLlmDecoder(
+            batch_size=batch_size,
+            name="ise-uiuc/Magicoder-S-CL-7B",
+            temperature=temperature,  
         )
 
     raise ValueError(f"Invalid model name: {name}")
