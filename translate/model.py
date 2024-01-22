@@ -140,6 +140,9 @@ class VLlmDecoder(DecoderBase):
             assert self.temperature > 0, "Temperature must be greater than 0!"
         batch_size = min(self.batch_size, num_samples)
 
+        if 'CodeLlama' in self.name:
+            prompt = f'<s>[INST] <<SYS>> You are a code translation expert. <</SYS>>\n\n{prompt}\n\n[/INST]'
+
         vllm_outputs = self.llm.generate(
             [prompt] * batch_size,
             SamplingParams(

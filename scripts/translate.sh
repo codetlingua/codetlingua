@@ -5,7 +5,7 @@ export PYTHONIOENCODING=utf-8;
 
 function prompt() {
     echo;
-    echo "Syntax: bash scripts/translate.sh MODEL DATASET SRC_LANG TRG_LANG TEMPERATURE N_SAMPLES B_SIZE GPU_ID MAX_LENGTH GPU_ID";
+    echo "Syntax: bash scripts/translate.sh MODEL DATASET SRC_LANG TRG_LANG TEMPERATURE N_SAMPLES B_SIZE MAX_LENGTH NUM_GPUS GPU_ID";
     echo "MODEL: name of the model to use";
     echo "DATASET: name of the dataset to use";
     echo "SRC_LANG: source language";
