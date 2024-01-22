@@ -39,7 +39,7 @@ N_SAMPLES=$6
 B_SIZE=$7
 MAX_LENGTH=$8
 NUM_GPUS=$9
-GPU_ID=$10
+GPU_ID=${10}
 
 export CUDA_VISIBLE_DEVICES=$GPU_ID;
 python3 translate/translate.py --model=$MODEL --dataset=$DATASET --source_lang=$SRC_LANG --target_lang=$TRG_LANG --temperature=$TEMPERATURE --n_samples=$N_SAMPLES --batch_size=$B_SIZE --max_length=$MAX_LENGTH --ngpus=$NUM_GPUS --resume
