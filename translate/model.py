@@ -3,9 +3,12 @@ import os
 from abc import ABC, abstractmethod
 from typing import List
 from warnings import warn
+import glob
+
+cache_dir = os.getcwd() + "/huggingface"
+os.environ["TRANSFORMERS_CACHE"] = cache_dir
 
 
-os.environ["TRANSFORMERS_CACHE"] = os.getcwd() + "/huggingface"
 
 import openai
 import torch
@@ -19,6 +22,57 @@ from transformers import (
 from vllm import LLM, SamplingParams
 
 EOS = ["<|endoftext|>", "<|endofmask|>", "</s>"]
+
+# function to build prompt accroding to various model instruction formats
+def compose_prompt(prompt_type: str, source_lang: str, target_lang: str, code: str) -> str:
+
+    prompt = f"{source_lang}:\n{code}\n\nTranslate the above {source_lang} code to {target_lang} and end with comment \"<END-OF-CODE>\".\n\n{target_lang}:\n"    
+
+    if prompt_type == 'codellama':
+        prompt = f'<s>[INST] <<SYS>> You are a code translation expert. <</SYS>>\n\nTranslate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"\n\n[/INST]\n\n{source_lang}:\n{code}\n\n{target_lang}:\n'
+
+    if prompt_type == 'octocoder':
+        prompt = f'Question: You are a code translation expert. Translate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"\n\n{source_lang}\n{code}\n\nAnswer:\n {target_lang}\n'
+
+    if prompt_type == 'dolphin' or prompt_type == 'mistral-hermes':
+        prompt = f"""<|im_start|>system
+                You are a code translation expert.<|im_end|>
+                <|im_start|>user
+                Can you translate the following {source_lang} code into {target_lang} and end with comment \"<END-OF-CODE>\"?
+                ```{source_lang}
+                {code}
+                ```
+                <|im_end|>
+                <|im_start|>assistant
+                ```{target_lan}
+                """
+
+    if prompt_type == 'solar':
+        prompt = f"""<s> ### User:
+        Can you translate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"?
+        ```{source_lan}
+        {code}
+        ```
+
+        ### Assistant:
+        Sure!
+        ```{target_lang}
+        """       
+
+    if prompt_type == 'wizardcoder':
+        prompt = f"""You are a code translation expert. Below is an instruction that describes a code translation task. Write a response that appropriately completes the request.
+
+        ### Instruction:
+        Write {target_lang} code that translates the following {source_lang} code and end with comment\"<END-OF-CODE>\":
+        {code}
+
+        ### Response:"""    
+
+    if prompt_type == "deepseek":
+        prompt = f"Please translate the following {source_lang} code to {target_lang} and end with comment\"<END-OF-CODE>\":\n\n{source_lang}\n{code}\n\n"     
+              
+
+    return prompt
 
 
 # Adopted from https://github.com/huggingface/transformers/pull/14897
@@ -85,6 +139,7 @@ class DecoderBase(ABC):
     ) -> List[str]:
         pass
 
+
     def __repr__(self) -> str:
         return self.name
 
@@ -115,23 +170,40 @@ class VLlmDecoder(DecoderBase):
             kwargs["dtype"] = "float16"
             kwargs["trust_remote_code"] = True
 
-       
+              
         self.path = name
    
         self.llm = LLM(model=self.path, **kwargs)
 
         self.context_window_length = self.llm.get_tokenizer().model_max_length
-        if self.context_window_length > 1000000 and name in model_paths:
-            with open(f'{self.path}/config.json') as fin:
-                config_data = json.load(fin)
+        if self.context_window_length > 1000000:
 
-            if 'n_positions' in config_data:
-                self.context_window_length = config_data['n_positions']
-            elif 'max_position_embeddings' in config_data:
-                self.context_window_length = config_data['max_position_embeddings']
+            # find config file 
+            p = [x for x in os.listdir(cache_dir) if x.find(name.split('/')[-1])>0]
+            p = [x for x in p if os.path.isdir(f'{cache_dir}/{x}')][0]
+            self.path = f'{cache_dir}/{p}'
+
+            config_path = None
+            for path in glob.glob(f'{self.path}/**/config.json', recursive=True):
+                config_path = path
+
+            if config_path:
+                with open(config_path) as fin:
+                    config_data = json.load(fin)
+
+                if 'n_positions' in config_data:
+                    self.context_window_length = config_data['n_positions']
+                elif 'max_position_embeddings' in config_data:
+                    self.context_window_length = config_data['max_position_embeddings']
+                else:
+                    print('Model has unclear context_window_length, setting to 1024')
+                    self.context_window_length = 1024
             else:
                 print('Model has unclear context_window_length, setting to 1024')
-                self.context_window_length = 1024
+                self.context_window_length = 1024   
+
+  
+
 
     def codegen(
         self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
@@ -139,9 +211,6 @@ class VLlmDecoder(DecoderBase):
         if do_sample:
             assert self.temperature > 0, "Temperature must be greater than 0!"
         batch_size = min(self.batch_size, num_samples)
-
-        if 'CodeLlama' in self.name:
-            prompt = f'<s>[INST] <<SYS>> You are a code translation expert. <</SYS>>\n\n{prompt}\n\n[/INST]'
 
         vllm_outputs = self.llm.generate(
             [prompt] * batch_size,
@@ -165,62 +234,12 @@ class ChatML(VLlmDecoder):
         super().__init__(name, **kwargs)
         self.eos += ["\n```"]
 
-    def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 512 + 256
-    ) -> List[str]:
-        if do_sample:
-            assert self.temperature > 0, "Temperature must be greater than 0!"
-
-        input = f"""<|im_start|>system
-You are an intelligent programming assistant to produce Python algorithmic solutions<|im_end|>
-<|im_start|>user
-Can you complete the following Python function?
-```python
-{prompt}
-```
-<|im_end|>
-<|im_start|>assistant
-```python
-"""
-        return VLlmDecoder.codegen(self, input, do_sample, num_samples, max_length)
-
-
-class Solar(VLlmDecoder):
-    def __init__(self, name: str, **kwargs) -> None:
-        super().__init__(name, **kwargs)
-        self.eos += ["\n```"]
 
     def codegen(
         self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
     ) -> List[str]:
         if do_sample:
             assert self.temperature > 0, "Temperature must be greater than 0!"
-
-        input = f"""<s> ### User:
-Can you solve and complete the Python function below?
-```python
-{prompt}
-```
-
-### Assistant:
-Sure!
-```python
-"""
-        return VLlmDecoder.codegen(self, input, do_sample, num_samples)
-
-
-class WizardCoderDecoder(VLlmDecoder):
-    def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
-    ) -> List[str]:
-        prompt = f"""Below is an instruction that describes a task. Write a response that appropriately completes the request.
-
-
-### Instruction:
-Create a Python script for this problem:
-{prompt}
-
-### Response:"""
 
         return VLlmDecoder.codegen(self, prompt, do_sample, num_samples, max_length)
 
@@ -360,7 +379,7 @@ class DeepSeekInstruct(HFTorchDecoder):
             [
                 {
                     "role": "user",
-                    "content": f"Please implement the following Python function in a markdown style code block:\n\n```python\n{prompt}\n```\n",
+                    "content": f"{prompt}",
                 }
             ],
             return_tensors="pt",
@@ -929,7 +948,7 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
                 temperature=temperature,
             )
     elif name == "wizardcoder-33b":
-        return WizardCoderDecoder(
+        return VLlmDecoder(
             batch_size=batch_size,
             name="WizardLM/WizardCoder-33B-V1.1",
             temperature=temperature,
@@ -937,21 +956,21 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             tensor_parallel_size=ngpus,
         )    
     elif name == "wizardcoder-34b":
-        return WizardCoderDecoder(
+        return VLlmDecoder(
             batch_size=batch_size,
             name="WizardLM/WizardCoder-Python-34B-V1.0",
             temperature=temperature,
             conversational=True,
         )
     elif name == "wizardcoder-15b":
-        return WizardCoderDecoder(
+        return VLlmDecoder(
             batch_size=batch_size,
             name="WizardLM/WizardCoder-15B-V1.0",
             temperature=temperature,
             conversational=True,
         )
     elif name == "wizardcoder-7b":
-        return WizardCoderDecoder(
+        return VLlmDecoder(
             batch_size=batch_size,
             name="WizardLM/WizardCoder-Python-7B-V1.0",
             temperature=temperature,
@@ -996,7 +1015,7 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             # max_new_tokens=512 + 256,
         )
     elif name == "solar-10.7b-instruct":
-        return Solar(
+        return ChatML(
             batch_size=batch_size,
             name="upstage/SOLAR-10.7B-Instruct-v1.0",
             temperature=temperature,

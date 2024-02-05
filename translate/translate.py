@@ -4,7 +4,7 @@ from os import PathLike
 import logging
 
 from datasets import load_dataset
-from model import DecoderBase, make_model
+from model import DecoderBase, make_model, compose_prompt
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -59,7 +59,9 @@ def translate(args, workdir: PathLike, model: DecoderBase):
 
             sidx = args.n_samples - nsamples
             while sidx < args.n_samples:
-                prompt = f"{args.source_lang}:\n{item['code']}\n\nTranslate the above {args.source_lang} code to {args.target_lang} and end with comment \"<END-OF-CODE>\".\n\n{args.target_lang}:\n"
+
+                prompt = compose_prompt(args.prompt_type, args.source_lang, args.target_lang, item['code'])
+                # prompt = f"{args.source_lang}:\n{item['code']}\n\nTranslate the above {args.source_lang} code to {args.target_lang} and end with comment \"<END-OF-CODE>\".\n\n{args.target_lang}:\n"
                 outputs = model.codegen(prompt,
                     do_sample=not args.greedy,
                     num_samples=args.n_samples - sidx,
@@ -86,6 +88,7 @@ def translate(args, workdir: PathLike, model: DecoderBase):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True, type=str)
+    parser.add_argument("--prompt_type", default='base', type=str, choices=["base", "codellama", "octocoder", "dolphin", "solar", "wizardcoder","deepseek"])
     parser.add_argument("--batch_size", default=1, type=int)
     parser.add_argument("--temperature", default=0.0, type=float)
     parser.add_argument("--dataset", required=True, type=str, choices=["codenet", "avatar"])
