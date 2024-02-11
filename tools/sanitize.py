@@ -54,13 +54,12 @@ if __name__ == "__main__":
 
         if args.remove_prompt:
             new_code = new_code[new_code.find(f"{args.target_lang}:\n") + len(f"{args.target_lang}:\n"):]
+            while new_code.strip().startswith(f"{args.target_lang}:"):
+                new_code = new_code[new_code.find(f"{args.target_lang}:\n") + len(f"{args.target_lang}:\n"):]
 
         # basic handling of chat output
-        new_code = new_code.replace(f"```{args.target_lang.lower()}", "").replace("```", "")
+        new_code = new_code.replace(f"```{args.target_lang.lower()}", "").replace("```", "").strip()
 
-        for eof in args.eofs:
-            new_code = new_code.split(eof)[0]
-        
         for prefix in args.rm_prefix_lines:
             new_code = "\n".join(
                 [
@@ -68,7 +67,10 @@ if __name__ == "__main__":
                     for line in new_code.splitlines()
                     if not line.startswith(prefix)
                 ]
-            )
+            ).strip()
+
+        for eof in args.eofs:
+            new_code = new_code.split(eof)[0].strip()
 
         new_solutions.append(
             {

@@ -5,7 +5,8 @@ export PYTHONIOENCODING=utf-8;
 
 function prompt() {
     echo;
-    echo "Syntax: bash scripts/sanitize.sh MODEL DATASET SRC_LANG TRG_LANG TEMPERATURE REMOVE_PROMPT";
+    echo "Syntax: bash scripts/sanitize.sh TRANS_DIR MODEL DATASET SRC_LANG TRG_LANG TEMPERATURE REMOVE_PROMPT";
+    echo "TRANS_DIR: directory where the translations are stored";
     echo "MODEL: name of the model to use";
     echo "DATASET: name of the dataset to use";
     echo "SRC_LANG: source language";
@@ -22,20 +23,22 @@ while getopts ":h" option; do
     esac
 done
 
-if [[ $# < 6 ]]; then
+if [[ $# < 7 ]]; then
   prompt;
 fi
 
-MODEL=$1
-DATASET=$2
-SRC_LANG=$3
-TRG_LANG=$4
-TEMPERATURE=$5
-REMOVE_PROMPT=$6
+TRANS_DIR=$1
+MODEL=$2
+DATASET=$3
+SRC_LANG=$4
+TRG_LANG=$5
+TEMPERATURE=$6
+REMOVE_PROMPT=$7
 
-python3 tools/sanitize.py   --samples=translations/$DATASET/$MODEL/$SRC_LANG/$TRG_LANG/temperature_$TEMPERATURE/ \
+python3 tools/sanitize.py   --samples=$TRANS_DIR/$DATASET/$MODEL/$SRC_LANG/$TRG_LANG/temperature_$TEMPERATURE/ \
                             --source_lang=$SRC_LANG \
                             --target_lang=$TRG_LANG \
                             --$REMOVE_PROMPT \
-                            --eofs "# <END-OF-CODE>" "<END-OF-CODE>" "END-OF-CODE" "Python:" "Java:" "C:" "# Answer:" \
-                            --rm-prefix-lines "Translate the above" '"""'
+                            --eofs "# <END-OF-CODE>" "// <END-OF-CODE>" "<END-OF-CODE>" "END-OF-CODE" "Python:" "Java:" "C:" "C++:" "Go:" "# Answer:" \
+                                   "# 2nd solution:" "Note" "Input:"\
+                            --rm-prefix-lines "Translate the above" '"""' "Here" "[PYTHON]" "[JAVA]" "[C]" "[C++]" "[GO]"
