@@ -3,22 +3,76 @@
 2. Warn the code that are not compilable (it could be some impl issues).
 """
 
+import os
 import ast
 import traceback
+import javalang
+import subprocess
 
 from termcolor import colored
 from datasets import load_dataset
 from utils import load_solutions
 
 
-def syntax_check(code, verbose=False):
-    try:
-        ast.parse(code)
-        return True
-    except (SyntaxError, MemoryError):
-        if verbose:
-            traceback.print_exc()
-        return False
+def syntax_check(code, target_lang, verbose=False):
+    os.makedirs("temp_dir", exist_ok=True)
+
+    if target_lang == "Python":
+        try:
+            ast.parse(code)
+            return True
+        except (SyntaxError, MemoryError):
+            if verbose:
+                traceback.print_exc()
+            return False
+        
+    elif target_lang == "Java":
+        try:
+            javalang.parse.parse(code)
+            return True
+        except Exception:
+            if verbose:
+                traceback.print_exc()
+            return False
+        
+    elif target_lang == "C":
+        with open("temp_dir/temp.c", "w") as f:
+            f.write(code)
+        try:
+            subprocess.run("gcc temp_dir/temp.c", check=True, capture_output=True, shell=True, timeout=10)
+            os.remove("temp_dir/temp.c")
+            return True
+        except Exception:
+            if verbose:
+                traceback.print_exc()
+            os.remove("temp_dir/temp.c")
+            return False
+        
+    elif target_lang == "C++":
+        with open("temp_dir/temp.cpp", "w") as f:
+            f.write(code)
+        try:
+            subprocess.run("g++ temp_dir/temp.cpp", check=True, capture_output=True, shell=True, timeout=10)
+            os.remove("temp_dir/temp.cpp")
+            return True
+        except Exception:
+            if verbose:
+                traceback.print_exc()
+            os.remove("temp_dir/temp.cpp")
+            return False
+
+    elif target_lang == "Go":
+        with open("temp_dir/temp.go", "w") as f:
+            f.write(code)
+        try:
+            subprocess.run("go build temp_dir/temp.go", check=True, capture_output=True, shell=True, timeout=10)
+            os.remove("temp_dir/temp.go")
+            return True
+        except Exception:
+            if verbose:
+                traceback.print_exc()
+            os.remove("temp_dir/temp.go")
+            return False
 
 
 if __name__ == "__main__":
@@ -101,10 +155,11 @@ if __name__ == "__main__":
             if code.strip() == "":
                 print(colored(f" ⚠️ {dbg_identifier} is empty!", "red"))
                 nwrong += 1
-            elif not syntax_check(code, args.verbose):
+            elif not syntax_check(code, args.target_lang, args.verbose):
                 print(colored(f" ⚠️ {dbg_identifier} is not compilable!", "red"))
                 nwrong += 1
     if 0 != nwrong:
         print(colored(f" ::::: ⚠️ {nwrong}/{ncode} code are not compilable!", "red"))
+        print(colored(f" ::::: ⚠️ {round((nwrong / ncode) * 100,2)}% of code are not compilable!", "red"))
     else:
         print(colored(f" ::::: All {ncode} code are compilable!", "green"))
