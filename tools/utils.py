@@ -1,4 +1,5 @@
 import os
+import re
 from os import PathLike
 from typing import Dict, Iterable, List, Optional, Union, Any, Tuple
 import multiprocessing
@@ -109,6 +110,156 @@ def exec_sample(
         except Exception as e:
             stat.value = _COMPILE_FAILED
     
+        shutil.rmtree(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}")
+    
+    elif target_lang =="Java":
+
+        with open(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.java", "w") as f:
+            pattern = re.compile(r'\bclass\s+\w+')
+            code = re.sub(pattern, f'class {problem["id"]}', code)
+            f.write(code)
+        
+        try:
+            subprocess.run(f"javac temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.java", check=True, capture_output=True, shell=True, timeout=30)
+
+            p = Popen(f"java temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
+
+            test_io = problem['test_IO']
+            for i in range(len(test_io)):
+                f_in = test_io[i]['input']
+                f_out = test_io[i]['output']
+
+                try:
+                    stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
+                except subprocess.TimeoutExpired:
+                    stat.value = _INFINTIE_LOOP
+                    break
+                
+                if(stdout.decode().strip()==f_out.strip()):
+                    stat.value = _SUCCESS
+                    continue
+
+                else:
+                    if stderr_data.decode()=='':
+                        stat.value = _TEST_FAILED
+                    else:
+                        stat.value = _RUNTIME_FAILED
+                    break
+        
+        except Exception as e:
+            stat.value = _COMPILE_FAILED
+        
+        shutil.rmtree(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}")
+    
+    elif target_lang =="C":
+
+        with open(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.c", "w") as f:
+            f.write(code)
+        
+        try:
+            subprocess.run(f"gcc temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.c", check=True, capture_output=True, shell=True, timeout=30)
+
+            p = Popen(f"./a.out", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
+
+            test_io = problem['test_IO']
+            for i in range(len(test_io)):
+                f_in = test_io[i]['input']
+                f_out = test_io[i]['output']
+
+                try:
+                    stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
+                except subprocess.TimeoutExpired:
+                    stat.value = _INFINTIE_LOOP
+                    break
+                
+                if(stdout.decode().strip()==f_out.strip()):
+                    stat.value = _SUCCESS
+                    continue
+
+                else:
+                    if stderr_data.decode()=='':
+                        stat.value = _TEST_FAILED
+                    else:
+                        stat.value = _RUNTIME_FAILED
+                    break
+        
+        except Exception as e:
+            stat.value = _COMPILE_FAILED
+        
+        shutil.rmtree(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}")
+
+    elif target_lang =="C++":
+
+        with open(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.cpp", "w") as f:
+            f.write(code)
+        
+        try:
+            subprocess.run(f"g++ -o exec_output temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.cpp", check=True, capture_output=True, shell=True, timeout=30)
+
+            p = Popen(f"./exec_output", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
+
+            test_io = problem['test_IO']
+            for i in range(len(test_io)):
+                f_in = test_io[i]['input']
+                f_out = test_io[i]['output']
+
+                try:
+                    stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
+                except subprocess.TimeoutExpired:
+                    stat.value = _INFINTIE_LOOP
+                    break
+                
+                if(stdout.decode().strip()==f_out.strip()):
+                    stat.value = _SUCCESS
+                    continue
+
+                else:
+                    if stderr_data.decode()=='':
+                        stat.value = _TEST_FAILED
+                    else:
+                        stat.value = _RUNTIME_FAILED
+                    break
+        
+        except Exception as e:
+            stat.value = _COMPILE_FAILED
+        
+        shutil.rmtree(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}")
+
+    elif target_lang =="Go":
+
+        with open(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.go", "w") as f:
+            f.write(code)
+        
+        try:
+            subprocess.run(f"go build temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.go", check=True, capture_output=True, shell=True, timeout=30)
+
+            p = Popen(f"./{problem['id']}", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
+
+            test_io = problem['test_IO']
+            for i in range(len(test_io)):
+                f_in = test_io[i]['input']
+                f_out = test_io[i]['output']
+
+                try:
+                    stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
+                except subprocess.TimeoutExpired:
+                    stat.value = _INFINTIE_LOOP
+                    break
+                
+                if(stdout.decode().strip()==f_out.strip()):
+                    stat.value = _SUCCESS
+                    continue
+
+                else:
+                    if stderr_data.decode()=='':
+                        stat.value = _TEST_FAILED
+                    else:
+                        stat.value = _RUNTIME_FAILED
+                    break
+        
+        except Exception as e:
+            stat.value = _COMPILE_FAILED
+        
         shutil.rmtree(f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}")
 
 

@@ -119,7 +119,7 @@ def evaluate(flags):
 
     pass_at_k = {
         f"pass @ {k}": estimate_pass_at_k(total, total_correct, k).mean()
-        for k in [1, 5, 10]
+        for k in [1, 5]
         if total.min() >= k
     }
     cprint(f"{flags.dataset} ({flags.source_lang} -> {flags.target_lang})", "red")
