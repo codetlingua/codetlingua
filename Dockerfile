@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     clang-14 \
     golang-1.20 \
     git \
+    wget \
+    vim \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --upgrade pip
