@@ -122,7 +122,7 @@ def exec_sample(
         try:
             subprocess.run(f"javac temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.java", check=True, capture_output=True, shell=True, timeout=30)
 
-            p = Popen(f"java temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
+            p = Popen(f"java {problem['id']}", cwd=f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
 
             test_io = problem['test_IO']
             for i in range(len(test_io)):
