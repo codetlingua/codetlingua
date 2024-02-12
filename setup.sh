@@ -17,6 +17,7 @@ function install_dependencies() {
     pip3 install tokenizers==0.15.0;
     pip3 install rich==13.3.5;
     pip3 install datasets==2.16.1;
+    pip3 install termcolor==2.4.0;
 }
 
 # setup_env;
