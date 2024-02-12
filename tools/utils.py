@@ -83,20 +83,41 @@ def exec_sample(
         try:
             subprocess.run(f"python3 -m py_compile temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.py", check=True, capture_output=True, shell=True)
 
-            p = Popen(f"python3 temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.py", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
-
             test_io = problem['test_IO']
             for i in range(len(test_io)):
                 f_in = test_io[i]['input']
                 f_out = test_io[i]['output']
-
+                
+                p = Popen(f"python3 temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.py", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
+                
                 try:
                     stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
                 except subprocess.TimeoutExpired:
                     stat.value = _INFINTIE_LOOP
                     break
                 
-                if(stdout.decode().strip()==f_out.strip()):
+                try:
+                    if float(stdout.decode())%1 == 0:
+                        stdout = str(int(float(stdout.decode())))
+                        f_out = str(int(float(f_out)))
+                    else:
+                        # find how many decimal points are there in the output
+                        stdout_temp = stdout.decode().strip()
+                        f_out_temp = f_out.strip()
+                        f_out_total_dec_points = len(f_out_temp.split(".")[1])
+                        stdout_total_dec_points = len(stdout_temp.split(".")[1])
+                        min_dec_points = min(f_out_total_dec_points, stdout_total_dec_points)
+
+                        stdout = str(round(float(stdout.decode()), min_dec_points))
+                        f_out = str(round(float(f_out), min_dec_points))
+
+                except:
+                    try: # if stdout is already decoded as String, then pass
+                        stdout = stdout.decode()
+                    except:
+                        pass
+                
+                if(stdout.strip()==f_out.strip()):
                     stat.value = _SUCCESS
                     continue
 
@@ -122,20 +143,41 @@ def exec_sample(
         try:
             subprocess.run(f"javac temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.java", check=True, capture_output=True, shell=True, timeout=30)
 
-            p = Popen(f"java {problem['id']}", cwd=f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
-
             test_io = problem['test_IO']
             for i in range(len(test_io)):
                 f_in = test_io[i]['input']
                 f_out = test_io[i]['output']
+
+                p = Popen(f"java {problem['id']}", cwd=f"temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
 
                 try:
                     stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
                 except subprocess.TimeoutExpired:
                     stat.value = _INFINTIE_LOOP
                     break
+
+                try:
+                    if float(stdout.decode())%1 == 0:
+                        stdout = str(int(float(stdout.decode())))
+                        f_out = str(int(float(f_out)))
+                    else:
+                        # find how many decimal points are there in the output
+                        stdout_temp = stdout.decode().strip()
+                        f_out_temp = f_out.strip()
+                        f_out_total_dec_points = len(f_out_temp.split(".")[1])
+                        stdout_total_dec_points = len(stdout_temp.split(".")[1])
+                        min_dec_points = min(f_out_total_dec_points, stdout_total_dec_points)
+
+                        stdout = str(round(float(stdout.decode()), min_dec_points))
+                        f_out = str(round(float(f_out), min_dec_points))
+
+                except:
+                    try: # if stdout is already decoded as String, then pass
+                        stdout = stdout.decode()
+                    except:
+                        pass
                 
-                if(stdout.decode().strip()==f_out.strip()):
+                if(stdout.strip()==f_out.strip()):
                     stat.value = _SUCCESS
                     continue
 
@@ -159,20 +201,41 @@ def exec_sample(
         try:
             subprocess.run(f"gcc temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.c", check=True, capture_output=True, shell=True, timeout=30)
 
-            p = Popen(f"./a.out", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
-
             test_io = problem['test_IO']
             for i in range(len(test_io)):
                 f_in = test_io[i]['input']
                 f_out = test_io[i]['output']
+
+                p = Popen(f"./a.out", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
 
                 try:
                     stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
                 except subprocess.TimeoutExpired:
                     stat.value = _INFINTIE_LOOP
                     break
+
+                try:
+                    if float(stdout.decode())%1 == 0:
+                        stdout = str(int(float(stdout.decode())))
+                        f_out = str(int(float(f_out)))
+                    else:
+                        # find how many decimal points are there in the output
+                        stdout_temp = stdout.decode().strip()
+                        f_out_temp = f_out.strip()
+                        f_out_total_dec_points = len(f_out_temp.split(".")[1])
+                        stdout_total_dec_points = len(stdout_temp.split(".")[1])
+                        min_dec_points = min(f_out_total_dec_points, stdout_total_dec_points)
+
+                        stdout = str(round(float(stdout.decode()), min_dec_points))
+                        f_out = str(round(float(f_out), min_dec_points))
+
+                except:
+                    try: # if stdout is already decoded as String, then pass
+                        stdout = stdout.decode()
+                    except:
+                        pass
                 
-                if(stdout.decode().strip()==f_out.strip()):
+                if(stdout.strip()==f_out.strip()):
                     stat.value = _SUCCESS
                     continue
 
@@ -196,20 +259,41 @@ def exec_sample(
         try:
             subprocess.run(f"g++ -o exec_output temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.cpp", check=True, capture_output=True, shell=True, timeout=30)
 
-            p = Popen(f"./exec_output", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
-
             test_io = problem['test_IO']
             for i in range(len(test_io)):
                 f_in = test_io[i]['input']
                 f_out = test_io[i]['output']
+
+                p = Popen(f"./exec_output", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
 
                 try:
                     stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
                 except subprocess.TimeoutExpired:
                     stat.value = _INFINTIE_LOOP
                     break
+
+                try:
+                    if float(stdout.decode())%1 == 0:
+                        stdout = str(int(float(stdout.decode())))
+                        f_out = str(int(float(f_out)))
+                    else:
+                        # find how many decimal points are there in the output
+                        stdout_temp = stdout.decode().strip()
+                        f_out_temp = f_out.strip()
+                        f_out_total_dec_points = len(f_out_temp.split(".")[1])
+                        stdout_total_dec_points = len(stdout_temp.split(".")[1])
+                        min_dec_points = min(f_out_total_dec_points, stdout_total_dec_points)
+
+                        stdout = str(round(float(stdout.decode()), min_dec_points))
+                        f_out = str(round(float(f_out), min_dec_points))
+
+                except:
+                    try: # if stdout is already decoded as String, then pass
+                        stdout = stdout.decode()
+                    except:
+                        pass
                 
-                if(stdout.decode().strip()==f_out.strip()):
+                if(stdout.strip()==f_out.strip()):
                     stat.value = _SUCCESS
                     continue
 
@@ -233,20 +317,41 @@ def exec_sample(
         try:
             subprocess.run(f"go build temp_dir/{problem['id']}-{problem['language']}-{target_lang}-{completion_id}/{problem['id']}.go", check=True, capture_output=True, shell=True, timeout=30)
 
-            p = Popen(f"./{problem['id']}", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
-
             test_io = problem['test_IO']
             for i in range(len(test_io)):
                 f_in = test_io[i]['input']
                 f_out = test_io[i]['output']
 
+                p = Popen(f"./{problem['id']}", stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
+                
                 try:
                     stdout, stderr_data = p.communicate(input=f_in.encode(), timeout=100)
                 except subprocess.TimeoutExpired:
                     stat.value = _INFINTIE_LOOP
                     break
+
+                try:
+                    if float(stdout.decode())%1 == 0:
+                        stdout = str(int(float(stdout.decode())))
+                        f_out = str(int(float(f_out)))
+                    else:
+                        # find how many decimal points are there in the output
+                        stdout_temp = stdout.decode().strip()
+                        f_out_temp = f_out.strip()
+                        f_out_total_dec_points = len(f_out_temp.split(".")[1])
+                        stdout_total_dec_points = len(stdout_temp.split(".")[1])
+                        min_dec_points = min(f_out_total_dec_points, stdout_total_dec_points)
+
+                        stdout = str(round(float(stdout.decode()), min_dec_points))
+                        f_out = str(round(float(f_out), min_dec_points))
+
+                except:
+                    try: # if stdout is already decoded as String, then pass
+                        stdout = stdout.decode()
+                    except:
+                        pass
                 
-                if(stdout.decode().strip()==f_out.strip()):
+                if(stdout.strip()==f_out.strip()):
                     stat.value = _SUCCESS
                     continue
 
