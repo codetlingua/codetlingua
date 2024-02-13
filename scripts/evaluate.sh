@@ -40,5 +40,4 @@ python3 tools/evaluate.py   --samples=$TRANS_DIR/$DATASET/$MODEL/$SRC_LANG/$TRG_
                             --dataset=$DATASET \
                             --source_lang=$SRC_LANG \
                             --target_lang=$TRG_LANG \
-                            --re-run \
                             --parallel=$N_CORES
