@@ -47,10 +47,14 @@ def compose_prompt(prompt_type: str, source_lang: str, target_lang: str, code: s
                 ```{target_lan}
                 """
 
+    if prompt_type == 'starcoder':
+        prompt = f"<fim_prefix>{source_lang}:\n{code}\n{target_lang}:\n<fim_suffix><fim_middle>"
+                
+
     if prompt_type == 'solar':
         prompt = f"""<s> ### User:
         Can you translate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"?
-        ```{source_lan}
+        ```{source_lang}
         {code}
         ```
 
@@ -69,7 +73,21 @@ def compose_prompt(prompt_type: str, source_lang: str, target_lang: str, code: s
         ### Response:"""    
 
     if prompt_type == "deepseek":
-        prompt = f"Please translate the following {source_lang} code to {target_lang} and end with comment\"<END-OF-CODE>\":\n\n{source_lang}\n{code}\n\n"     
+        prompt = f"Translate the following {source_lang} code to {target_lang} and end with comment\"<END-OF-CODE>\":\n\n{source_lang}\n{code}\n\n"     
+
+    if prompt_type == "phi":   
+         prompt = 'Instruct: You are a code translation expert. Translate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"\n\n{source_lang}\n{code}\n\nOutput:\n {target_lang}\n'   
+
+    if prompt_type == 'magic':
+        
+        prompt = f"""You are an exceptionally intelligent coding assistant that consistently delivers accurate and reliable responses to user instructions.
+
+        @@ Instruction
+        You are a code translation expert. Translate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"\n\n{source_lang}\n{code}\n'
+
+        @@ Response
+        {target_lang}
+        """     
               
 
     return prompt
@@ -256,6 +274,7 @@ class HFTorchDecoder(DecoderBase):
                 "Salesforce/codegen2-3_7B",
                 "Salesforce/codegen2-7B",
                 "Salesforce/codegen2-16B",
+                "deepseek-ai/deepseek-coder-1.3b-base",
                 "deepseek-ai/deepseek-coder-6.7b-base",
                 "deepseek-ai/deepseek-coder-33b-base",
             }
@@ -942,10 +961,11 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
                 conversational=True,
             )
         else:
-            return HFTorchDecoder(
+            return VLlmDecoder(
                 batch_size=batch_size,
                 name=f"deepseek-ai/deepseek-coder-{nb}b-base",
                 temperature=temperature,
+                tensor_parallel_size=ngpus,
             )
     elif name == "wizardcoder-33b":
         return VLlmDecoder(
@@ -961,6 +981,7 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             name="WizardLM/WizardCoder-Python-34B-V1.0",
             temperature=temperature,
             conversational=True,
+            tensor_parallel_size=ngpus,
         )
     elif name == "wizardcoder-15b":
         return VLlmDecoder(
@@ -968,6 +989,7 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             name="WizardLM/WizardCoder-15B-V1.0",
             temperature=temperature,
             conversational=True,
+            tensor_parallel_size=ngpus,
         )
     elif name == "wizardcoder-7b":
         return VLlmDecoder(
@@ -975,6 +997,7 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             name="WizardLM/WizardCoder-Python-7B-V1.0",
             temperature=temperature,
             conversational=True,
+            tensor_parallel_size=ngpus,
         )
     elif name == "mistral-7b-codealpaca":
         return HFTorchDecoder(
@@ -1034,7 +1057,7 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             name="microsoft/phi-2",
             temperature=temperature,
         )
-    elif name == "mistral-8x7b-instruct":
+    elif name == "mixtral-8x7b-instruct":
         return VLlmDecoder(
             batch_size=batch_size,
             name="mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -1046,18 +1069,21 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             batch_size=batch_size,
             name="bigcode/octocoder",
             temperature=temperature,
+            tensor_parallel_size=ngpus,
         )
     elif name == "magicoder-s-ds-6.7b":
         return VLlmDecoder(
             batch_size=batch_size,
             name="ise-uiuc/Magicoder-S-DS-6.7B",
             temperature=temperature,
+            tensor_parallel_size=ngpus,
         )
     elif name == "magicoder-s-cl-7b":
         return VLlmDecoder(
             batch_size=batch_size,
             name="ise-uiuc/Magicoder-S-CL-7B",
-            temperature=temperature,  
+            temperature=temperature, 
+            tensor_parallel_size=ngpus, 
         )
 
     raise ValueError(f"Invalid model name: {name}")
