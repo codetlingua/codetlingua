@@ -52,10 +52,19 @@ if __name__ == "__main__":
 
         new_code = old_code
 
-        if args.remove_prompt:
+        if args.remove_prompt and 'code-llama' in target_path:
             new_code = new_code[new_code.find(f"{args.target_lang}:\n") + len(f"{args.target_lang}:\n"):]
             while new_code.strip().startswith(f"{args.target_lang}:"):
                 new_code = new_code[new_code.find(f"{args.target_lang}:\n") + len(f"{args.target_lang}:\n"):]
+        
+        if args.remove_prompt and 'magicoder' in target_path:
+            new_code = new_code.split("@@ Response")[1].strip()
+
+        if args.remove_prompt and 'octocoder' in target_path:
+            new_code = new_code.split("Answer:")[1].strip()
+        
+        if args.remove_prompt and 'mixtral' in target_path:
+            new_code = new_code.split(f"{args.target_lang}:")[1].strip()
 
         # basic handling of chat output
         new_code = new_code.replace(f"```{args.target_lang.lower()}", "").replace("```", "").strip()
