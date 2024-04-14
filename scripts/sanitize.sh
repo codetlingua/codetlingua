@@ -40,5 +40,5 @@ python3 tools/sanitize.py   --samples=$TRANS_DIR/$DATASET/$MODEL/$SRC_LANG/$TRG_
                             --target_lang=$TRG_LANG \
                             --$REMOVE_PROMPT \
                             --eofs "# <END-OF-CODE>" "// <END-OF-CODE>" "<END-OF-CODE>" "END-OF-CODE" "Python:" "Java:" "C:" "C++:" "Go:" "# Answer:" \
-                                   "# 2nd solution:" "Note" "Input:" "1." "Explanation" \
-                            --rm-prefix-lines "Translate the above" '"""' "Here" "[PYTHON]" "[JAVA]" "[C]" "[C++]" "[GO]" "C++" "cpp" "c++" "C" "Python" "python" "Java" "java" "Go" "go" "The" "Please" "This" "That" "After" "You" "-" "In" "Also"
+                                   "# 2nd solution:" "Note" "Input:" "1." "Explanation" "A:"\
+                            --rm-prefix-lines "Translate the above" '"""' "Here" "[PYTHON]" "[JAVA]" "[C]" "[C++]" "[GO]" "C++" "cpp" "c++" "C" "Python" "python" "Java" "java" "Go" "go" "The" "Please" "This" "That" "After" "You" "-" "In" "Also" "To" "Key"
