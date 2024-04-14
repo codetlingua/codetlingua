@@ -66,6 +66,34 @@ if __name__ == "__main__":
         if args.remove_prompt and 'mixtral' in target_path:
             new_code = new_code.split(f"{args.target_lang}:")[1].strip()
 
+        if args.remove_prompt and 'phi2' in target_path:
+            if 'Output:' in new_code:
+                new_code = new_code.split("Output:")[1].strip()
+
+        if args.remove_prompt and ('gpt-4' in target_path or 'gpt-3.5' in target_path):
+            trg_lang = args.target_lang.lower() if args.target_lang.lower() != 'c++' else 'cpp'
+            new_code = new_code[new_code.find(f"```{trg_lang}") + len(f"```{trg_lang}"):]
+            new_code = new_code[:new_code.find("```")]
+
+        if args.remove_prompt and 'gemini-pro' in target_path:
+            new_code_lines = new_code.split("\n")
+            generation_index = new_code_lines.index(args.target_lang)
+            new_code = "\n".join(new_code_lines[generation_index + 1:]).strip()
+
+        if args.remove_prompt and 'claude' in target_path:
+            new_code_lines = new_code.split("\n")
+            generation_index = new_code_lines.index(args.target_lang)
+            new_code = "\n".join(new_code_lines[generation_index + 1:]).strip()
+
+        if args.remove_prompt and 'deepseek' in target_path:
+            trg_lang = args.target_lang.lower()
+            if trg_lang == 'c++' and '```c++' in new_code:
+                trg_lang = 'c++'
+            elif trg_lang == 'c++' and '```cpp' in new_code:
+                trg_lang = 'cpp'
+            new_code = new_code[new_code.find(f"```{trg_lang}") + len(f"```{trg_lang}"):]
+            new_code = new_code[:new_code.find("```")]
+
         # basic handling of chat output
         new_code = new_code.replace(f"```{args.target_lang.lower()}", "").replace("```", "").strip()
 
