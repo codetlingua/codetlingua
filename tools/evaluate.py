@@ -39,10 +39,10 @@ def evaluate(flags):
 
     else:
         if flags.dataset == "codenet":
-            problems = load_dataset("icatlab-uiuc/codenet")['train']
+            problems = load_dataset("iidai/codenet")['train']
             problems = [p for p in problems if p['language'] == flags.source_lang]
         elif flags.dataset == "avatar":
-            problems = load_dataset("icatlab-uiuc/avatar")['train']
+            problems = load_dataset("iidai/avatar")['train']
             problems = [p for p in problems if p['language'] == flags.source_lang]
 
         results = {

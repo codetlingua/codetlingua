@@ -28,10 +28,10 @@ def translate(args, workdir: PathLike, model: DecoderBase):
         TimeElapsedColumn(),
     ) as p:
         if args.dataset == "codenet":
-            dataset = load_dataset("icatlab-uiuc/codenet")
+            dataset = load_dataset("iidai/codenet")
 
         elif args.dataset == "avatar":
-            dataset = load_dataset("icatlab-uiuc/avatar")
+            dataset = load_dataset("iidai/avatar")
 
         for item in p.track(dataset['train']):
 

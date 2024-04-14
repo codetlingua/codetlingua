@@ -92,10 +92,10 @@ if __name__ == "__main__":
     solutions = load_solutions(args)
     
     if args.dataset == "codenet":
-        dataset = load_dataset("icatlab-uiuc/codenet")['train']
+        dataset = load_dataset("iidai/codenet")['train']
         dataset_name = "codenet"
     elif args.dataset == "avatar":
-        dataset = load_dataset("icatlab-uiuc/avatar")['train']
+        dataset = load_dataset("iidai/avatar")['train']
         dataset_name = "avatar"
 
     id2solutions = {}
