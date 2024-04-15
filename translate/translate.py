@@ -88,7 +88,7 @@ def translate(args, workdir: PathLike, model: DecoderBase):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True, type=str)
-    parser.add_argument("--prompt_type", default='base', type=str, choices=["base", "codellama", "octocoder", "dolphin", "solar", "wizardcoder","deepseek"])
+    parser.add_argument("--prompt_type", default='base', type=str, choices=["base", "gemini", "claude", "gpt", "codellama", "octocoder", "dolphin", "solar", "wizardcoder","deepseek"])
     parser.add_argument("--batch_size", default=1, type=int)
     parser.add_argument("--temperature", default=0.0, type=float)
     parser.add_argument("--dataset", required=True, type=str, choices=["codenet", "avatar"])

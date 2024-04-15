@@ -14,3 +14,11 @@ Here are some ideas to get you started:
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
 -->
+
+### Closed models API calls
+ In order to use GPT, Claude and Gemini, the following environment variables must be set before running the code. 
+ - GPT:  OPENAI_API_KEY
+ - Claude: ANTHROPIC_KEY
+ - Gemini: GEMINI_KEY
+
+ The current system has been tested with `gpt3.5-turbo`, `gpt4`, `gpt-4-0125`, `gemini-pro` (1.0), `claude-3-opus-20240229` .

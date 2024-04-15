@@ -8,7 +8,9 @@ import glob
 cache_dir = os.getcwd() + "/huggingface"
 os.environ["TRANSFORMERS_CACHE"] = cache_dir
 
-
+import anthropic
+import anthropic_request
+import google.generativeai as genai
 
 import openai
 import torch
@@ -19,6 +21,7 @@ from transformers import (
     StoppingCriteria,
     StoppingCriteriaList,
 )
+from openai_request import make_auto_request
 from vllm import LLM, SamplingParams
 
 EOS = ["<|endoftext|>", "<|endofmask|>", "</s>"]
@@ -27,6 +30,12 @@ EOS = ["<|endoftext|>", "<|endofmask|>", "</s>"]
 def compose_prompt(prompt_type: str, source_lang: str, target_lang: str, code: str) -> str:
 
     prompt = f"{source_lang}:\n{code}\n\nTranslate the above {source_lang} code to {target_lang} and end with comment \"<END-OF-CODE>\".\n\n{target_lang}:\n"    
+
+    if prompt_type == 'gpt' or prompt_type == 'gemini':
+        prompt = f'You are a code translation expert. Translate the {source_lang} code below to {target_lang}\n\n{source_lang}\n{code}\n\n{target_lang}\n'
+
+    if prompt_type == 'claude':
+        prompt = f'\n```Translate the {source_lang} code below to {target_lang}\n\n{source_lang}\n{code}\n\n{target_lang}\n```\n'
 
     if prompt_type == 'codellama':
         prompt = f'<s>[INST] <<SYS>> You are a code translation expert. <</SYS>>\n\nTranslate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"\n\n[/INST]\n\n{source_lang}:\n{code}\n\n{target_lang}:\n'
@@ -73,10 +82,15 @@ def compose_prompt(prompt_type: str, source_lang: str, target_lang: str, code: s
         ### Response:"""    
 
     if prompt_type == "deepseek":
-        prompt = f"Translate the following {source_lang} code to {target_lang} and end with comment\"<END-OF-CODE>\":\n\n{source_lang}\n{code}\n\n"     
+        prompt = f'''You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
+        ### Instruction:
+        Translate the following {source_lang} code to {target_lang}.\n\n{source_lang}\n{code}
+
+        ### Response:
+        '''
 
     if prompt_type == "phi":   
-         prompt = 'Instruct: You are a code translation expert. Translate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"\n\n{source_lang}\n{code}\n\nOutput:\n {target_lang}\n'   
+         prompt = f'Instruct: You are a code translation expert. Translate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"\n\n{source_lang}\n{code}\n\nOutput:\n {target_lang}\n'   
 
     if prompt_type == 'magic':
         
@@ -88,7 +102,16 @@ def compose_prompt(prompt_type: str, source_lang: str, target_lang: str, code: s
         @@ Response
         {target_lang}
         """     
-              
+
+    if prompt_type == 'vicuna':
+        prompt = f"""### System Prompt
+                     You are a code translation expert.
+
+                    ### User Message
+                    Translate the {source_lang} code below to {target_lang} and end with comment \"<END-OF-CODE>\"\n\n{source_lang}\n{code}\n
+
+                    ### Assistant
+                   """
 
     return prompt
 
@@ -164,6 +187,78 @@ class DecoderBase(ABC):
     def __str__(self) -> str:
         return self.name
 
+# NOTE: in order to use Gemini, the GEMINI_KEY environment variable must be set 
+class GeminiDecoder(DecoderBase, ABC):
+    def __init__(self, name: str, **kwargs) -> None:
+        super().__init__(name, **kwargs)
+   
+        genai.configure(api_key=os.environ.get('GEMINI_KEY'))
+
+        self.model = genai.GenerativeModel(name)
+
+    def codegen(self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024) -> List[str]:
+        if do_sample:
+            assert self.temperature > 0, "Temperature must be positive for sampling"
+
+        batch_size = min(self.batch_size, num_samples)
+        if not do_sample:
+            assert batch_size == 1, "Sampling only supports batch size of 1"
+
+        outputs = []
+        for _ in range(batch_size):
+            try:
+                response = self.model.generate_content(prompt, 
+                                                    generation_config=genai.types.GenerationConfig(
+                                                        # Only one candidate for now.
+                                                        candidate_count=num_samples,
+                                                        max_output_tokens=max_length,
+                                                        temperature=self.temperature)
+                                                        )
+                outputs.append(response.text)                                        
+            except:  
+                outputs.append('GEMINI API ERROR')    
+            
+
+        return outputs    
+
+
+# NOTE: in order to use Claude, the ANTHROPIC_KEY environment variable must be set 
+class AnthropicDecoder(DecoderBase, ABC):
+    def __init__(self, name: str, **kwargs) -> None:
+        super().__init__(name, **kwargs)
+        self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_KEY"))
+
+
+class AnthropicMessageDecoder(AnthropicDecoder):
+    def codegen(
+        self, prompt: str, do_sample: bool = True, num_samples: int = 200, max_length: int = 1024
+    ) -> List[str]:
+        if do_sample:
+            assert self.temperature > 0, "Temperature must be positive for sampling"
+
+        batch_size = min(self.batch_size, num_samples)
+        if not do_sample:
+            assert batch_size == 1, "Sampling only supports batch size of 1"
+
+        outputs = []
+        for _ in range(batch_size):
+            message = anthropic_request.make_auto_request(
+                client=self.client,
+                model=self.name,
+                system="You are a code translation expert.",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                max_tokens=max_length,
+                temperature=self.temperature,
+                stop_sequences=["\n```\n"],
+            )
+            outputs.append(message.content[0].text)
+
+        return outputs
 
 class VLlmDecoder(DecoderBase):
     def __init__(self, name: str, **kwargs) -> None:
@@ -194,7 +289,7 @@ class VLlmDecoder(DecoderBase):
         self.llm = LLM(model=self.path, **kwargs)
 
         self.context_window_length = self.llm.get_tokenizer().model_max_length
-        if self.context_window_length > 1000000:
+        if self.context_window_length > 30000:
 
             # find config file 
             p = [x for x in os.listdir(cache_dir) if x.find(name.split('/')[-1])>0]
@@ -277,6 +372,9 @@ class HFTorchDecoder(DecoderBase):
                 "deepseek-ai/deepseek-coder-1.3b-base",
                 "deepseek-ai/deepseek-coder-6.7b-base",
                 "deepseek-ai/deepseek-coder-33b-base",
+                "deepseek-ai/deepseek-coder-1.3b-instruct",
+                "deepseek-ai/deepseek-coder-6.7b-instruct",
+                "deepseek-ai/deepseek-coder-33b-instruct"
             }
         }
 
@@ -303,6 +401,7 @@ class HFTorchDecoder(DecoderBase):
         elif "Mistral" in name or "zephyr-7b-beta" in name:
             kwargs["torch_dtype"] = torch.bfloat16
         if "deepseek" in name:
+            kwargs["device_map"] = "auto"
             kwargs["torch_dtype"] = torch.bfloat16
             self.skip_special_tokens = True
         if "/phi" in name:
@@ -310,7 +409,7 @@ class HFTorchDecoder(DecoderBase):
             kwargs["trust_remote_code"] = True
             self.skip_special_tokens = True
 
-        print(f"{kwargs = }")
+        print(f"{kwargs} = ")
 
         self.tokenizer = AutoTokenizer.from_pretrained(name)
         self.model = AutoModelForCausalLM.from_pretrained(name, **kwargs)
@@ -318,7 +417,9 @@ class HFTorchDecoder(DecoderBase):
             print("Switching to float16 ...")
             self.model = self.model.half()
             self.skip_special_tokens = True
-        self.model = self.model.to(self.device)
+
+        if kwargs["device_map"] != "auto":
+            self.model = self.model.to(self.device)
 
 
         self.context_window_length = self.tokenizer.model_max_length
@@ -427,7 +528,7 @@ class DeepSeekInstruct(HFTorchDecoder):
         )
         return gen_strs
 
-
+# NOTE: in order to use gpt, the OPENAI_API_KEY environment variable must be set 
 class OpenAIChatDecoder(DecoderBase):
     def __init__(self, name: str, **kwargs) -> None:
         super().__init__(name, **kwargs)
@@ -443,24 +544,18 @@ class OpenAIChatDecoder(DecoderBase):
         assert batch_size <= 20, "Use larger batch size could blow up the memory!"
 
         # construct prompt
-        fmt = "json_object" if self.name == "gpt-4-1106-preview" else "text"
-        if fmt == "json_object":
-            message = r'Please complete the following code snippet by generating JSON like {"code": ""}'
-        else:
-            message = r"Please generate code to complete the following problem:"
+        fmt = "text"
 
-        message += f"\n```python\n{prompt.strip()}\n```"
+        ret = make_auto_request(
+            self.client,
+            message=prompt,
+            model=self.name,
+            max_tokens=self.max_length,
+            temperature=self.temperature,
+            n=batch_size,
+            response_format={"type": fmt},
+        )
 
-        # ret = make_auto_request(
-        #     self.client,
-        #     message=message,
-        #     model=self.name,
-        #     max_tokens=self.max_new_tokens,
-        #     temperature=self.temperature,
-        #     n=batch_size,
-        #     response_format={"type": fmt},
-        # )
-        ret = {'choices': []}
 
         outputs = []
         for item in ret.choices:
@@ -896,13 +991,25 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             name="StabilityAI/stablelm-base-alpha-7b",
             temperature=temperature,
         )
-    elif name.startswith("gpt-3.5-") or name.startswith("gpt-4-"):
+    elif name.startswith("gpt-3.5-") or name.startswith("gpt-4"):
         return OpenAIChatDecoder(
             batch_size=batch_size,
             name=name,
             temperature=temperature,
             conversational=True,
         )
+    elif name.startswith("claude"):
+        return AnthropicMessageDecoder(
+            batch_size=batch_size,
+            name=name,
+            temperature=temperature,
+        )
+    elif name.startswith("gemini"):
+        return GeminiDecoder(
+            batch_size=batch_size,
+            name=name,
+            temperature=temperature,
+        )    
     elif name == "gptneo-2b":
         return HFTorchDecoder(
             batch_size=batch_size,
@@ -914,9 +1021,15 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             batch_size=batch_size, name="EleutherAI/gpt-j-6B", temperature=temperature
         )
     elif name.startswith("starcoder"):
-        return StarCoderInfill(
-            batch_size=batch_size, name=f"bigcode/{name}", temperature=temperature
+        return VLlmDecoder(
+            batch_size=batch_size,
+            name=f"bigcode/{name}",
+            temperature=temperature,
+            tensor_parallel_size=ngpus,
         )
+        # return StarCoderInfill(
+        #     batch_size=batch_size, name=f"bigcode/{name}", temperature=temperature
+        # )
     elif name == "codet5p-2b":
         return CodeT5P(
             batch_size=batch_size,
@@ -1018,10 +1131,11 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             temperature=temperature,
         )
     elif name == "phind-code-llama-34b-v2":
-        return HFTorchDecoder(
+        return VLlmDecoder(    
             batch_size=batch_size,
             name="Phind/Phind-CodeLlama-34B-v2",
             temperature=temperature,
+            tensor_parallel_size=ngpus,
         )
     elif name == "mistral-7b":
         return HFTorchDecoder(
@@ -1052,10 +1166,11 @@ def make_model(name: str, batch_size: int = 1, temperature: float = 0.8, ngpus: 
             # max_new_tokens=512 + 256,
         )
     elif name == "phi-2":
-        return HFTorchDecoder(    # using HFTorchDecoder instead of  VLlmDecoder until this issue is fixed in vllm main https://github.com/vllm-project/vllm/pull/2428
+        return VLlmDecoder(    
             batch_size=batch_size,
             name="microsoft/phi-2",
             temperature=temperature,
+            tensor_parallel_size=ngpus,
         )
     elif name == "mixtral-8x7b-instruct":
         return VLlmDecoder(
